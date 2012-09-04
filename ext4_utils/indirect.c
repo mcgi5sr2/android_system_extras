@@ -17,10 +17,9 @@
 #include "ext4_utils.h"
 #include "ext4.h"
 #include "ext4_extents.h"
+#include "backed_block.h"
 #include "indirect.h"
 #include "allocate.h"
-
-#include <sparse/sparse.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -46,7 +45,7 @@ static u8 *create_backing(struct block_allocation *alloc,
 
 		len = min(region_len * info.block_size, backing_len);
 
-		sparse_file_add_data(info.sparse_file, ptr, len, region_block);
+		queue_data_block(ptr, len, region_block);
 		ptr += len;
 		backing_len -= len;
 	}
@@ -123,8 +122,7 @@ static void fill_dindirect_block(u32 *dind_block, int len, struct block_allocati
 		dind_block[i] = ind_block;
 
 		u32 *ind_block_data = calloc(info.block_size, 1);
-		sparse_file_add_data(info.sparse_file, ind_block_data, info.block_size,
-				ind_block);
+		queue_data_block((u8*)ind_block_data, info.block_size, ind_block);
 		int ind_block_len = min((int)aux_info.blocks_per_ind, len);
 
 		fill_indirect_block(ind_block_data, ind_block_len, alloc);
@@ -153,8 +151,7 @@ static void fill_tindirect_block(u32 *tind_block, int len, struct block_allocati
 		tind_block[i] = dind_block;
 
 		u32 *dind_block_data = calloc(info.block_size, 1);
-		sparse_file_add_data(info.sparse_file, dind_block_data, info.block_size,
-				dind_block);
+		queue_data_block((u8*)dind_block_data, info.block_size, dind_block);
 		int dind_block_len = min((int)aux_info.blocks_per_dind, len);
 
 		fill_dindirect_block(dind_block_data, dind_block_len, alloc);
@@ -202,8 +199,7 @@ static int inode_attach_indirect_blocks(struct ext4_inode *inode,
 	}
 
 	u32 *ind_block_data = calloc(info.block_size, 1);
-	sparse_file_add_data(info.sparse_file, ind_block_data, info.block_size,
-			ind_block);
+	queue_data_block((u8*)ind_block_data, info.block_size, ind_block);
 
 	fill_indirect_block(ind_block_data, len, alloc);
 
@@ -234,8 +230,7 @@ static int inode_attach_dindirect_blocks(struct ext4_inode *inode,
 	}
 
 	u32 *dind_block_data = calloc(info.block_size, 1);
-	sparse_file_add_data(info.sparse_file, dind_block_data, info.block_size,
-			dind_block);
+	queue_data_block((u8*)dind_block_data, info.block_size, dind_block);
 
 	fill_dindirect_block(dind_block_data, len, alloc);
 
@@ -266,8 +261,7 @@ static int inode_attach_tindirect_blocks(struct ext4_inode *inode,
 	}
 
 	u32 *tind_block_data = calloc(info.block_size, 1);
-	sparse_file_add_data(info.sparse_file, tind_block_data, info.block_size,
-			tind_block);
+	queue_data_block((u8*)tind_block_data, info.block_size, tind_block);
 
 	fill_tindirect_block(tind_block_data, len, alloc);
 
@@ -446,13 +440,12 @@ void inode_attach_resize(struct ext4_inode *inode,
 	u32 *dind_block_data = calloc(info.block_size, 1);
 	if (!dind_block_data)
 		critical_error_errno("calloc");
-	sparse_file_add_data(info.sparse_file, dind_block_data, info.block_size,
-			dind_block);
+	queue_data_block((u8 *)dind_block_data, info.block_size, dind_block);
 
 	u32 *ind_block_data = calloc(info.block_size, info.bg_desc_reserve_blocks);
 	if (!ind_block_data)
 		critical_error_errno("calloc");
-	sparse_file_add_data(info.sparse_file, ind_block_data,
+	queue_data_block((u8 *)ind_block_data,
 			info.block_size * info.bg_desc_reserve_blocks,
 			get_block(alloc, 0));
 
@@ -491,10 +484,9 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
 		unsigned long backing_len)
 {
 	struct block_allocation *alloc;
-	u32 block_len = DIV_ROUND_UP(len, info.block_size);
 	u8 *data = NULL;
 
-	alloc = do_inode_allocate_indirect(inode, block_len);
+	alloc = do_inode_allocate_indirect(inode, len);
 	if (alloc == NULL) {
 		error("failed to allocate extents for %lu bytes", len);
 		return NULL;
@@ -505,10 +497,6 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
 		if (!data)
 			error("failed to create backing for %lu bytes", backing_len);
 	}
-
-	rewind_alloc(alloc);
-	if (do_inode_attach_indirect(inode, alloc, block_len))
-		error("failed to attach blocks to indirect inode");
 
 	free_alloc(alloc);
 

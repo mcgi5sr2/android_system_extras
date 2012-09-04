@@ -17,9 +17,8 @@
 #include "ext4_utils.h"
 #include "ext4.h"
 #include "ext4_extents.h"
+#include "backed_block.h"
 #include "extent.h"
-
-#include <sparse/sparse.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,7 +42,7 @@ static u8 *extent_create_backing(struct block_allocation *alloc,
 
 		len = min(region_len * info.block_size, backing_len);
 
-		sparse_file_add_data(info.sparse_file, ptr, len, region_block);
+		queue_data_block(ptr, len, region_block);
 		ptr += len;
 		backing_len -= len;
 	}
@@ -65,8 +64,7 @@ static void extent_create_backing_file(struct block_allocation *alloc,
 
 		len = min(region_len * info.block_size, backing_len);
 
-		sparse_file_add_file(info.sparse_file, filename, offset, len,
-				region_block);
+		queue_data_file(filename, offset, len, region_block);
 		offset += len;
 		backing_len -= len;
 	}
@@ -125,8 +123,7 @@ static struct block_allocation *do_inode_allocate_extents(
 		if (!data)
 			critical_error_errno("calloc");
 
-		sparse_file_add_data(info.sparse_file, data, info.block_size,
-				extent_block);
+		queue_data_block(data, info.block_size, extent_block);
 
 		if (((int)(info.block_size - sizeof(struct ext4_extent_header) /
 				sizeof(struct ext4_extent))) < allocation_len) {

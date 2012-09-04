@@ -15,13 +15,12 @@
  */
 
 #include "make_ext4fs.h"
+#include "output_file.h"
 #include "ext4_utils.h"
 #include "allocate.h"
 #include "contents.h"
 #include "uuid.h"
-#include "wipe.h"
-
-#include <sparse/sparse.h>
+#include "backed_block.h"
 
 #include <assert.h>
 #include <dirent.h>
@@ -296,11 +295,7 @@ void reset_ext4fs_info() {
     // can be called again.
     memset(&info, 0, sizeof(info));
     memset(&aux_info, 0, sizeof(aux_info));
-
-    if (info.sparse_file) {
-        sparse_file_destroy(info.sparse_file);
-        info.sparse_file = NULL;
-    }
+    free_data_blocks();
 }
 
 int make_ext4fs(const char *filename, s64 len,
@@ -399,8 +394,6 @@ int make_ext4fs_internal(int fd, const char *directory,
 	printf("    Block groups: %d\n", aux_info.groups);
 	printf("    Reserved block group size: %d\n", info.bg_desc_reserve_blocks);
 
-	info.sparse_file = sparse_file_new(info.block_size, info.len);
-
 	block_allocator_init();
 
 	ext4_fill_in_sb();
@@ -465,13 +458,7 @@ int make_ext4fs_internal(int fd, const char *directory,
 			aux_info.sb->s_blocks_count_lo - aux_info.sb->s_free_blocks_count_lo,
 			aux_info.sb->s_blocks_count_lo);
 
-	if (wipe)
-		wipe_block_device(fd, info.len);
-
-	write_ext4_image(fd, gzip, sparse, crc);
-
-	sparse_file_destroy(info.sparse_file);
-	info.sparse_file = NULL;
+	write_ext4_image(fd, gzip, sparse, crc, wipe);
 
 	return 0;
 }
