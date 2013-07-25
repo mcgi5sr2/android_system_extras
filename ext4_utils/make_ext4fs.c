@@ -180,6 +180,17 @@ static u32 build_directory_structure(const char *full_path, const char *dir_path
 			error("can't set android permissions - built without android support");
 #endif
 		}
+#ifndef USE_MINGW
+		if (sehnd) {
+			if (selabel_lookup(sehnd, &dentries[i].secon, dentries[i].path, stat.st_mode) < 0) {
+				error("cannot lookup security context for %s", dentries[i].path);
+			}
+
+			if (dentries[i].secon && verbose)
+				printf("Labeling %s as %s\n", dentries[i].path, dentries[i].secon);
+		}
+#endif
+
 		if (S_ISREG(stat.st_mode)) {
 			dentries[i].file_type = EXT4_FT_REG_FILE;
 		} else if (S_ISDIR(stat.st_mode)) {
@@ -220,6 +231,10 @@ static u32 build_directory_structure(const char *full_path, const char *dir_path
 		dentries[0].file_type = EXT4_FT_DIR;
 		dentries[0].uid = 0;
 		dentries[0].gid = 0;
+		if (sehnd) {
+			if (selabel_lookup(sehnd, &dentries[0].secon, dentries[0].path, dentries[0].mode) < 0)
+				error("cannot lookup security context for %s", dentries[0].path);
+		}
 		entries++;
 		dirs++;
 	}
@@ -564,12 +579,16 @@ int make_ext4fs_internal(int fd, const char *_directory,
 	if (sehnd) {
 		char *secontext = NULL;
 
+		if (selabel_lookup(sehnd, &secontext, mountpoint, S_IFDIR) < 0) {
+			error("cannot lookup security context for %s", mountpoint);
+		}
 		if (secontext) {
 			if (verbose) {
 				printf("Labeling %s as %s\n", mountpoint, secontext);
 			}
 			inode_set_selinux(root_inode_num, secontext);
 		}
+		freecon(secontext);
 	}
 #endif
 
