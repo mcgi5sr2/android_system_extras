@@ -82,8 +82,8 @@ LOCAL_SHARED_LIBRARIES := \
 
 # Some MMCs have VERY slow secure erase - use
 #standard erase instead
-ifeq ($(BOARD_SUPPRESS_SECURE_ERASE),true)
-    LOCAL_CFLAGS += -DSUPPRESS_SECURE_ERASE
+ifeq ($(or $(BOARD_SUPPRESS_SECURE_ERASE),$(BOARD_SUPPRESS_EMMC_WIPE)),true)
+    LOCAL_CFLAGS += -DSUPPRESS_EMMC_WIPE
 endif
 
 include $(BUILD_SHARED_LIBRARY)
@@ -98,8 +98,8 @@ LOCAL_STATIC_LIBRARIES += \
 
 # Some MMCs have VERY slow secure erase - use
 #standard erase instead
-ifeq ($(BOARD_SUPPRESS_SECURE_ERASE),true)
-    LOCAL_CFLAGS += -DSUPPRESS_SECURE_ERASE
+ifeq ($(or $(BOARD_SUPPRESS_SECURE_ERASE),$(BOARD_SUPPRESS_EMMC_WIPE)),true)
+    LOCAL_CFLAGS += -DSUPPRESS_EMMC_WIPE
 endif
 
 include $(BUILD_STATIC_LIBRARY)
